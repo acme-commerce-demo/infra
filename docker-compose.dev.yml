@@ -1,0 +1,61 @@
+version: '3.8'
+
+# Development override - uses volume mounts for hot reloading
+# Usage: docker-compose -f docker-compose.yml -f docker-compose.dev.yml up
+
+services:
+  # ===================
+  # TypeScript Services with hot reload
+  # ===================
+  user-service:
+    build:
+      context: ./user-service
+      dockerfile: Dockerfile.dev
+    volumes:
+      - ./user-service/src:/app/src:ro
+      - ./user-service/package.json:/app/package.json:ro
+    command: npm run dev
+
+  order-service:
+    build:
+      context: ./order-service
+      dockerfile: Dockerfile.dev
+    volumes:
+      - ./order-service/src:/app/src:ro
+      - ./order-service/package.json:/app/package.json:ro
+    command: npm run dev
+
+  payment-service:
+    build:
+      context: ./payment-service
+      dockerfile: Dockerfile.dev
+    volumes:
+      - ./payment-service/src:/app/src:ro
+      - ./payment-service/package.json:/app/package.json:ro
+    command: npm run dev
+
+  notification-service:
+    build:
+      context: ./notification-service
+      dockerfile: Dockerfile.dev
+    volumes:
+      - ./notification-service/src:/app/src:ro
+      - ./notification-service/package.json:/app/package.json:ro
+    command: npm run dev
+
+  # ===================
+  # Go Services with hot reload (using air)
+  # ===================
+  api-gateway:
+    build:
+      context: ./api-gateway
+      dockerfile: Dockerfile.dev
+    volumes:
+      - ./api-gateway:/app:ro
+
+  inventory-service:
+    build:
+      context: ./inventory-service
+      dockerfile: Dockerfile.dev
+    volumes:
+      - ./inventory-service:/app:ro

@@ -1,0 +1,238 @@
+version: '3.8'
+
+services:
+  # ===================
+  # Infrastructure
+  # ===================
+  postgres:
+    image: postgres:16-alpine
+    container_name: acme-postgres
+    environment:
+      POSTGRES_USER: acme
+      POSTGRES_PASSWORD: acme_dev_password
+      POSTGRES_DB: acme
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U acme"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: acme-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: acme-rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: acme
+      RABBITMQ_DEFAULT_PASS: acme_dev_password
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ===================
+  # Go Services
+  # ===================
+  api-gateway:
+    build:
+      context: ./api-gateway
+      dockerfile: Dockerfile
+    container_name: acme-api-gateway
+    ports:
+      - "8080:8080"
+    environment:
+      PORT: 8080
+      USER_SERVICE_URL: http://user-service:3000
+      ORDER_SERVICE_URL: http://order-service:3000
+      PAYMENT_SERVICE_URL: http://payment-service:3000
+      INVENTORY_SERVICE_URL: http://inventory-service:8080
+      NOTIFICATION_SERVICE_URL: http://notification-service:3000
+      JWT_SECRET: dev_jwt_secret_change_in_production
+      RATE_LIMIT_RPS: 100
+      LOG_LEVEL: debug
+    depends_on:
+      user-service:
+        condition: service_healthy
+      order-service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  inventory-service:
+    build:
+      context: ./inventory-service
+      dockerfile: Dockerfile
+    container_name: acme-inventory-service
+    ports:
+      - "8081:8080"
+    environment:
+      PORT: 8080
+      DATABASE_URL: postgres://acme:acme_dev_password@postgres:5432/acme?sslmode=disable
+      REDIS_URL: redis://redis:6379
+      RESERVATION_TTL: 10m
+      LOG_LEVEL: debug
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ===================
+  # TypeScript Services
+  # ===================
+  user-service:
+    build:
+      context: ./user-service
+      dockerfile: Dockerfile
+      args:
+        JF_URL: ${JF_URL:-https://acme.jfrog.io}
+        JF_ACCESS_TOKEN: ${JF_ACCESS_TOKEN:-}
+    container_name: acme-user-service
+    ports:
+      - "3001:3000"
+    environment:
+      PORT: 3000
+      NODE_ENV: development
+      DATABASE_URL: postgres://acme:acme_dev_password@postgres:5432/acme
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: dev_jwt_secret_change_in_production
+      SESSION_SECRET: dev_session_secret_change_in_production
+      LOG_LEVEL: debug
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  order-service:
+    build:
+      context: ./order-service
+      dockerfile: Dockerfile
+      args:
+        JF_URL: ${JF_URL:-https://acme.jfrog.io}
+        JF_ACCESS_TOKEN: ${JF_ACCESS_TOKEN:-}
+    container_name: acme-order-service
+    ports:
+      - "3002:3000"
+    environment:
+      PORT: 3000
+      NODE_ENV: development
+      DATABASE_URL: postgres://acme:acme_dev_password@postgres:5432/acme
+      REDIS_URL: redis://redis:6379
+      RABBITMQ_URL: amqp://acme:acme_dev_password@rabbitmq:5672
+      INVENTORY_SERVICE_URL: http://inventory-service:8080
+      PAYMENT_SERVICE_URL: http://payment-service:3000
+      NOTIFICATION_SERVICE_URL: http://notification-service:3000
+      LOG_LEVEL: debug
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  payment-service:
+    build:
+      context: ./payment-service
+      dockerfile: Dockerfile
+      args:
+        JF_URL: ${JF_URL:-https://acme.jfrog.io}
+        JF_ACCESS_TOKEN: ${JF_ACCESS_TOKEN:-}
+    container_name: acme-payment-service
+    ports:
+      - "3003:3000"
+    environment:
+      PORT: 3000
+      NODE_ENV: development
+      DATABASE_URL: postgres://acme:acme_dev_password@postgres:5432/acme
+      REDIS_URL: redis://redis:6379
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-sk_test_placeholder}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-whsec_placeholder}
+      LOG_LEVEL: debug
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  notification-service:
+    build:
+      context: ./notification-service
+      dockerfile: Dockerfile
+      args:
+        JF_URL: ${JF_URL:-https://acme.jfrog.io}
+        JF_ACCESS_TOKEN: ${JF_ACCESS_TOKEN:-}
+    container_name: acme-notification-service
+    ports:
+      - "3004:3000"
+    environment:
+      PORT: 3000
+      NODE_ENV: development
+      REDIS_URL: redis://redis:6379
+      SENDGRID_API_KEY: ${SENDGRID_API_KEY:-placeholder}
+      TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID:-placeholder}
+      TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN:-placeholder}
+      LOG_LEVEL: debug
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  postgres_data:
+  redis_data:
+  rabbitmq_data:
+
+networks:
+  default:
+    name: acme-network
