@@ -55,7 +55,7 @@ services:
   # ===================
   api-gateway:
     build:
-      context: ./api-gateway
+      context: ../api-gateway
       dockerfile: Dockerfile
     container_name: acme-api-gateway
     ports:
@@ -83,7 +83,7 @@ services:
 
   inventory-service:
     build:
-      context: ./inventory-service
+      context: ../inventory-service
       dockerfile: Dockerfile
     container_name: acme-inventory-service
     ports:
@@ -110,14 +110,14 @@ services:
   # ===================
   user-service:
     build:
-      context: ./user-service
+      context: ../user-service
       dockerfile: Dockerfile
       args:
         JF_URL: ${JF_URL:-https://acme.jfrog.io}
         JF_ACCESS_TOKEN: ${JF_ACCESS_TOKEN:-}
     container_name: acme-user-service
     ports:
-      - "3001:3000"
+      - "4001:3000"
     environment:
       PORT: 3000
       NODE_ENV: development
@@ -139,14 +139,14 @@ services:
 
   order-service:
     build:
-      context: ./order-service
+      context: ../order-service
       dockerfile: Dockerfile
       args:
         JF_URL: ${JF_URL:-https://acme.jfrog.io}
         JF_ACCESS_TOKEN: ${JF_ACCESS_TOKEN:-}
     container_name: acme-order-service
     ports:
-      - "3002:3000"
+      - "4002:3000"
     environment:
       PORT: 3000
       NODE_ENV: development
@@ -172,19 +172,20 @@ services:
 
   payment-service:
     build:
-      context: ./payment-service
+      context: ../payment-service
       dockerfile: Dockerfile
       args:
         JF_URL: ${JF_URL:-https://acme.jfrog.io}
         JF_ACCESS_TOKEN: ${JF_ACCESS_TOKEN:-}
     container_name: acme-payment-service
     ports:
-      - "3003:3000"
+      - "4003:3000"
     environment:
       PORT: 3000
       NODE_ENV: development
       DATABASE_URL: postgres://acme:acme_dev_password@postgres:5432/acme
-      REDIS_URL: redis://redis:6379
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
       STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-sk_test_placeholder}
       STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-whsec_placeholder}
       LOG_LEVEL: debug
@@ -201,14 +202,14 @@ services:
 
   notification-service:
     build:
-      context: ./notification-service
+      context: ../notification-service
       dockerfile: Dockerfile
       args:
         JF_URL: ${JF_URL:-https://acme.jfrog.io}
         JF_ACCESS_TOKEN: ${JF_ACCESS_TOKEN:-}
     container_name: acme-notification-service
     ports:
-      - "3004:3000"
+      - "4004:3000"
     environment:
       PORT: 3000
       NODE_ENV: development
